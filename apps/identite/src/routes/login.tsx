@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/stores/auth.store";
 
-export const Route = createFileRoute("/connexion")({
+export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
@@ -33,7 +33,7 @@ function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Connexion agent</CardTitle>
-          <CardDescription>Ministère de la Justice — Casier Judiciaire</CardDescription>
+          <CardDescription>Système National d'Enrôlement Citoyen</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -43,7 +43,7 @@ function LoginPage() {
                 id="badge"
                 value={badge}
                 onChange={(e) => setBadge(e.target.value)}
-                placeholder="J-0001"
+                placeholder="A-0001"
                 autoComplete="username"
                 required
               />

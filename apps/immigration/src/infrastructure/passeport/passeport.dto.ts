@@ -1,109 +1,76 @@
-import type { Passeport, PasseportDocument, PasseportStatus } from "@/domain/passeport";
+import type { Passeport, PasseportHistoryEntry, PasseportStats } from "@/domain/passeport";
 
-/**
- * Wire format POSTed to / received from the backend. Kept snake_case to
- * match typical REST/JSON:API government backend conventions, decoupled
- * from the camelCase domain model so either side can evolve independently.
- *
- * No identity block here by design — only citizen_uin, a foreign key
- * resolved by the Identity BB via OIDC/X-Road.
- */
+/** Wire format for GET/POST/PUT /demandes on api-passeport. */
 export interface PasseportDto {
   id: string;
-  numero_demande: string;
-  citizen_uin: string;
-  created_at: string;
-  updated_at: string;
-  status: PasseportStatus;
-
-  requester: {
-    citizen_display_name: string;
-  };
-
-  request: {
-    passport_type: Passeport["typePasseport"];
-    travel_reason: string;
-  };
-
-  // Reflète l'appel X-Road vers le Ministère de la Justice
-  // (voir architecture §4.5, endpoint "verifier-mention") — non implémenté,
-  // simple statut affiché pour le moment.
-  criminal_record_check: {
-    status: Passeport["verificationCasierStatut"];
-  };
-
-  documents: Array<{
-    key: string;
-    label: string;
-    status: PasseportDocument["status"];
-    file_name?: string;
-  }>;
-
-  delivery: {
-    pickup_center: string;
-  };
-
-  consent: {
-    accepted: boolean;
-  };
-
-  document_url?: string;
+  citizen_uid: string;
+  statut: "soumise" | "en_instruction" | "validee" | "rejetee";
+  casier_verifie: boolean;
+  document_url?: string | null;
+  cree_le: string;
+  mise_a_jour_le: string;
 }
 
-export function toPasseportDto(p: Passeport): PasseportDto {
-  return {
-    id: p.id,
-    numero_demande: p.numeroDemande,
-    citizen_uin: p.citizenUin,
-    created_at: p.createdAt,
-    updated_at: p.updatedAt,
-    status: p.status,
-    requester: {
-      citizen_display_name: p.citizenNomAffiche,
-    },
-    request: {
-      passport_type: p.typePasseport,
-      travel_reason: p.motifVoyage,
-    },
-    criminal_record_check: {
-      status: p.verificationCasierStatut,
-    },
-    documents: p.documents.map((d) => ({
-      key: d.key,
-      label: d.label,
-      status: d.status,
-      file_name: d.fileName,
-    })),
-    delivery: {
-      pickup_center: p.centreRetrait,
-    },
-    consent: {
-      accepted: p.consentement,
-    },
-    document_url: p.documentUrl,
-  };
+export interface PasseportCreateDto {
+  citizen_uid: string;
+}
+
+/** Wire format for GET /demandes/stats. */
+export interface PasseportStatsDto {
+  total: number;
+  soumises: number;
+  en_instruction: number;
+  validees: number;
+  rejetees: number;
+}
+
+/** Wire format for a single entry of GET /demandes/{id}/history (bare array). */
+export interface PasseportHistoryEntryDto {
+  statut: "soumise" | "en_instruction" | "validee" | "rejetee";
+  changed_by: string | null;
+  changed_at: string;
+  reason: string | null;
+}
+
+const statutToStatus: Record<PasseportDto["statut"], Passeport["status"]> = {
+  soumise: "Soumise",
+  en_instruction: "En instruction",
+  validee: "Validée",
+  rejetee: "Rejetée",
+};
+
+/** Only citizen_uid is accepted by POST /demandes. */
+export function toPasseportCreateDto(p: Passeport): PasseportCreateDto {
+  return { citizen_uid: p.citizenUin };
 }
 
 export function fromPasseportDto(dto: PasseportDto): Passeport {
   return {
     id: dto.id,
-    numeroDemande: dto.numero_demande,
-    citizenUin: dto.citizen_uin,
-    createdAt: dto.created_at,
-    updatedAt: dto.updated_at,
-    status: dto.status,
-    citizenNomAffiche: dto.requester.citizen_display_name,
-    typePasseport: dto.request.passport_type,
-    motifVoyage: dto.request.travel_reason,
-    verificationCasierStatut: dto.criminal_record_check.status,
-    documents: dto.documents.map((d) => ({
-      key: d.key,
-      label: d.label,
-      status: d.status,
-      fileName: d.file_name,
-    })),
-    centreRetrait: dto.delivery.pickup_center,
-    consentement: dto.consent.accepted,
-    documentUrl: dto.document_url,
+    citizenUin: dto.citizen_uid,
+    createdAt: dto.cree_le,
+    updatedAt: dto.mise_a_jour_le,
+    status: statutToStatus[dto.statut],
+    casierVerifie: dto.casier_verifie,
+    documentUrl: dto.document_url ?? undefined,
+  };
+}
+
+export function fromPasseportStatsDto(dto: PasseportStatsDto): PasseportStats {
+  return {
+    total: dto.total,
+    soumises: dto.soumises,
+    enInstruction: dto.en_instruction,
+    validees: dto.validees,
+    rejetees: dto.rejetees,
+  };
+}
+
+export function fromPasseportHistoryEntryDto(dto: PasseportHistoryEntryDto): PasseportHistoryEntry {
+  return {
+    status: statutToStatus[dto.statut],
+    changedBy: dto.changed_by,
+    changedAt: dto.changed_at,
+    reason: dto.reason,
   };
 }

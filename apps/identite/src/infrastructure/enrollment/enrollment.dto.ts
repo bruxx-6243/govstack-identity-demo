@@ -1,4 +1,10 @@
-import type { CitizenDocument, Enrollment, EnrollmentStatus } from "@/domain/enrollment";
+import type {
+  CitizenDocument,
+  Enrollment,
+  EnrollmentHistoryEntry,
+  EnrollmentStats,
+  EnrollmentStatus,
+} from "@/domain/enrollment";
 
 /**
  * Wire format POSTed to / received from the backend. Kept snake_case to
@@ -138,6 +144,40 @@ export function toEnrollmentDto(e: Enrollment): EnrollmentDto {
       accepted: e.consentement,
       signature: e.signature,
     },
+  };
+}
+
+/** Wire format for GET /enrollments/stats. */
+export interface EnrollmentStatsDto {
+  total: number;
+  pending: number;
+  validated: number;
+  drafts: number;
+}
+
+/** Wire format for a single entry of GET /enrollments/{id}/history (bare array). */
+export interface EnrollmentHistoryEntryDto {
+  status: EnrollmentStatus;
+  changed_by: string | null;
+  changed_at: string;
+  reason: string | null;
+}
+
+export function fromEnrollmentStatsDto(dto: EnrollmentStatsDto): EnrollmentStats {
+  return {
+    total: dto.total,
+    pending: dto.pending,
+    validated: dto.validated,
+    drafts: dto.drafts,
+  };
+}
+
+export function fromEnrollmentHistoryEntryDto(dto: EnrollmentHistoryEntryDto): EnrollmentHistoryEntry {
+  return {
+    status: dto.status,
+    changedBy: dto.changed_by,
+    changedAt: dto.changed_at,
+    reason: dto.reason,
   };
 }
 

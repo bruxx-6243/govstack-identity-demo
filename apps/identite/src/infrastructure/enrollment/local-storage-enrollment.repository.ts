@@ -1,7 +1,9 @@
 import {
   createEmptyEnrollment,
   type Enrollment,
+  type EnrollmentHistoryEntry,
   type EnrollmentRepository,
+  type EnrollmentStats,
 } from "@/domain/enrollment";
 
 const KEY = "enrollments_v1";
@@ -41,6 +43,56 @@ export class LocalStorageEnrollmentRepository implements EnrollmentRepository {
 
   async remove(id: string): Promise<void> {
     writeAll(readAll().filter((e) => e.id !== id));
+  }
+
+  async verify(enrollment: Enrollment): Promise<Enrollment> {
+    return this.save({ ...enrollment, status: "Validé" });
+  }
+
+  async reject(enrollment: Enrollment): Promise<Enrollment> {
+    // Reason isn't tracked client-side (mirrors the backend, which only
+    // stores it in the enrollment's history, not on the enrollment itself).
+    return this.save({ ...enrollment, status: "Rejeté" });
+  }
+
+  async getStats(): Promise<EnrollmentStats> {
+    const all = readAll();
+    return {
+      total: all.length,
+      pending: all.filter((e) => e.status === "En attente de validation").length,
+      validated: all.filter((e) => e.status === "Validé").length,
+      drafts: all.filter((e) => e.status === "Brouillon").length,
+    };
+  }
+
+  async getHistory(id: string): Promise<EnrollmentHistoryEntry[]> {
+    const enrollment = readAll().find((e) => e.id === id);
+    if (!enrollment) return [];
+    return [
+      { status: enrollment.status, changedBy: null, changedAt: enrollment.updatedAt, reason: null },
+    ];
+  }
+
+  async uploadDocument(enrollmentId: string, key: string, file: File): Promise<Enrollment> {
+    const enrollment = readAll().find((e) => e.id === enrollmentId);
+    if (!enrollment) throw new Error("Enrollment API error 404: dossier introuvable");
+    const updated: Enrollment = {
+      ...enrollment,
+      documents: enrollment.documents.map((d) =>
+        d.key === key ? { ...d, status: "Téléversé", fileName: file.name } : d,
+      ),
+    };
+    return this.save(updated);
+  }
+
+  async verifyDocument(enrollmentId: string, key: string): Promise<Enrollment> {
+    const enrollment = readAll().find((e) => e.id === enrollmentId);
+    if (!enrollment) throw new Error("Enrollment API error 404: dossier introuvable");
+    const updated: Enrollment = {
+      ...enrollment,
+      documents: enrollment.documents.map((d) => (d.key === key ? { ...d, status: "Vérifié" } : d)),
+    };
+    return this.save(updated);
   }
 }
 

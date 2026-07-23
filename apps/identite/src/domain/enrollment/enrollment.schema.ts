@@ -197,3 +197,17 @@ export function validateStep(step: number, data: Enrollment): Record<string, str
   }
   return errors;
 }
+
+export interface EnrollmentStats {
+  total: number;
+  pending: number;
+  validated: number;
+  drafts: number;
+}
+
+export interface EnrollmentHistoryEntry {
+  status: EnrollmentStatus;
+  changedBy: string | null;
+  changedAt: string;
+  reason: string | null;
+}

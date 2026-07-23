@@ -1,13 +1,71 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useAuthStore } from "@/stores/auth.store";
 
-// Le navigateur est simplement redirigé vers l'API, qui gère tout le flux
-// OIDC avec eSignet (voir §4.2 et §5.2 de l'architecture). Le frontend ne
-// manipule jamais de token OIDC — seulement le cookie de session httpOnly
-// posé par le backend après le callback.
 export const Route = createFileRoute("/connexion")({
-  loader: () => {
-    if (typeof window !== "undefined") {
-      window.location.href = "/api/auth/login";
-    }
-  },
+  component: LoginPage,
 });
+
+function LoginPage() {
+  const router = useRouter();
+  const { login, isLoading, error } = useAuthStore();
+  const [badge, setBadge] = useState("");
+  const [password, setPassword] = useState("");
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const ok = await login(badge, password);
+    if (ok) {
+      toast.success("Connexion réussie");
+      router.navigate({ to: "/" });
+    } else {
+      toast.error("Échec de la connexion");
+    }
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>Connexion agent</CardTitle>
+          <CardDescription>Affaires Étrangères / Immigration — Passeport</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="badge">Badge</Label>
+              <Input
+                id="badge"
+                value={badge}
+                onChange={(e) => setBadge(e.target.value)}
+                placeholder="P-0001"
+                autoComplete="username"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="password">Mot de passe</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? "Connexion..." : "Se connecter"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

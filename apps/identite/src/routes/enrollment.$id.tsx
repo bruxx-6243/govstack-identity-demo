@@ -50,6 +50,8 @@ function EnrollmentWizard() {
   const updateCurrent = useEnrollmentStore((s) => s.updateCurrent);
   const saveDraftInStore = useEnrollmentStore((s) => s.saveDraft);
   const finalizeInStore = useEnrollmentStore((s) => s.finalize);
+  const uploadDocumentInStore = useEnrollmentStore((s) => s.uploadDocument);
+  const verifyDocumentInStore = useEnrollmentStore((s) => s.verifyDocument);
   const [step, setStep] = useState(1);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const data = current;
@@ -129,7 +131,18 @@ function EnrollmentWizard() {
           {step === 3 && <Step3 data={data} update={update} errors={errors} />}
           {step === 4 && <Step4 data={data} update={update} errors={errors} />}
           {step === 5 && <Step5 data={data} update={update} errors={errors} />}
-          {step === 6 && <Step6 data={data} update={update} />}
+          {step === 6 && (
+            <Step6
+              data={data}
+              update={update}
+              onUpload={async (key, file) => {
+                await uploadDocumentInStore(data.id, key, file);
+              }}
+              onVerify={async (key) => {
+                await verifyDocumentInStore(data.id, key);
+              }}
+            />
+          )}
           {step === 7 && <Step7 data={data} update={update} />}
           {step === 8 && <Step8 data={data} update={update} errors={errors} />}
         </div>
@@ -456,13 +469,40 @@ function Step5({ data, update }: StepProps) {
   );
 }
 
-function Step6({ data, update }: { data: Enrollment; update: StepProps["update"] }) {
-  const setDoc = (key: string, patch: Partial<{ status: string; fileName: string }>) => {
-    update(
-      "documents",
-      data.documents.map((d) => (d.key === key ? ({ ...d, ...patch } as typeof d) : d)),
-    );
+function Step6({
+  data,
+  onUpload,
+  onVerify,
+}: {
+  data: Enrollment;
+  update: StepProps["update"];
+  onUpload: (key: string, file: File) => Promise<void>;
+  onVerify: (key: string) => Promise<void>;
+}) {
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+
+  const upload = async (key: string, file: File) => {
+    setPendingKey(key);
+    try {
+      await onUpload(key, file);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setPendingKey(null);
+    }
   };
+
+  const verify = async (key: string) => {
+    setPendingKey(key);
+    try {
+      await onVerify(key);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setPendingKey(null);
+    }
+  };
+
   return (
     <>
       <SectionTitle
@@ -470,47 +510,55 @@ function Step6({ data, update }: { data: Enrollment; update: StepProps["update"]
         subtitle="Téléversez les pièces justificatives fournies par le citoyen."
       />
       <div className="grid gap-4 md:grid-cols-2">
-        {data.documents.map((doc) => (
-          <div key={doc.key} className="rounded-lg border border-border bg-secondary/30 p-4">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-card ring-1 ring-border">
-                  <FileCheck2 className="h-5 w-5 text-cg-green" />
+        {data.documents.map((doc) => {
+          const isPending = pendingKey === doc.key;
+          return (
+            <div key={doc.key} className="rounded-lg border border-border bg-secondary/30 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-card ring-1 ring-border">
+                    <FileCheck2 className="h-5 w-5 text-cg-green" />
+                  </div>
+                  <div>
+                    <div className="font-medium text-foreground">{doc.label}</div>
+                    {doc.fileName && (
+                      <div className="text-xs text-muted-foreground">{doc.fileName}</div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <div className="font-medium text-foreground">{doc.label}</div>
-                  {doc.fileName && (
-                    <div className="text-xs text-muted-foreground">{doc.fileName}</div>
-                  )}
-                </div>
+                <StatusBadge status={doc.status} />
               </div>
-              <StatusBadge status={doc.status} />
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-secondary">
-                <Upload className="h-3.5 w-3.5" />
-                Téléverser
-                <input
-                  type="file"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) setDoc(doc.key, { status: "Téléversé", fileName: f.name });
-                  }}
-                />
-              </label>
-              {doc.status === "Téléversé" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setDoc(doc.key, { status: "Vérifié" })}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <label
+                  className={`inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-secondary ${isPending ? "pointer-events-none opacity-50" : ""}`}
                 >
-                  <Check className="mr-1 h-3.5 w-3.5" /> Marquer vérifié
-                </Button>
-              )}
+                  <Upload className="h-3.5 w-3.5" />
+                  {isPending ? "Téléversement..." : "Téléverser"}
+                  <input
+                    type="file"
+                    className="hidden"
+                    disabled={isPending}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) upload(doc.key, f);
+                    }}
+                  />
+                </label>
+                {doc.status === "Téléversé" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => verify(doc.key)}
+                    disabled={isPending}
+                  >
+                    <Check className="mr-1 h-3.5 w-3.5" />
+                    {isPending ? "Vérification..." : "Marquer vérifié"}
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );

@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as CitizensIdRouteImport } from './routes/citizens.$id'
 import { Route as EnrollmentIdRouteImport } from './routes/enrollment.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CitizensIdRoute = CitizensIdRouteImport.update({
@@ -31,30 +37,34 @@ const EnrollmentIdRoute = EnrollmentIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/citizens/$id': typeof CitizensIdRoute
   '/enrollment/$id': typeof EnrollmentIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/citizens/$id': typeof CitizensIdRoute
   '/enrollment/$id': typeof EnrollmentIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/citizens/$id': typeof CitizensIdRoute
   '/enrollment/$id': typeof EnrollmentIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/citizens/$id' | '/enrollment/$id'
+  fullPaths: '/' | '/login' | '/citizens/$id' | '/enrollment/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/citizens/$id' | '/enrollment/$id'
-  id: '__root__' | '/' | '/citizens/$id' | '/enrollment/$id'
+  to: '/' | '/login' | '/citizens/$id' | '/enrollment/$id'
+  id: '__root__' | '/' | '/login' | '/citizens/$id' | '/enrollment/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
   CitizensIdRoute: typeof CitizensIdRoute
   EnrollmentIdRoute: typeof EnrollmentIdRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/citizens/$id': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
   CitizensIdRoute: CitizensIdRoute,
   EnrollmentIdRoute: EnrollmentIdRoute,
 }

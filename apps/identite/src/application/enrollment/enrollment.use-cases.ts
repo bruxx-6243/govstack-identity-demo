@@ -10,7 +10,7 @@ import {
  */
 export function createEnrollmentUseCases(repository: EnrollmentRepository) {
   return {
-    listEnrollments: () => repository.list(),
+    listEnrollments: (page?: number, pageSize?: number) => repository.list(page, pageSize),
 
     getEnrollment: (id: string) => repository.getById(id),
 
@@ -26,10 +26,24 @@ export function createEnrollmentUseCases(repository: EnrollmentRepository) {
     },
 
     async verifyEnrollment(enrollment: Enrollment): Promise<Enrollment> {
-      return repository.save({ ...enrollment, status: "Validé" });
+      return repository.verify(enrollment);
+    },
+
+    async rejectEnrollment(enrollment: Enrollment, reason: string): Promise<Enrollment> {
+      return repository.reject(enrollment, reason);
     },
 
     deleteEnrollment: (id: string) => repository.remove(id),
+
+    getStats: () => repository.getStats(),
+
+    getHistory: (id: string) => repository.getHistory(id),
+
+    uploadDocument: (enrollmentId: string, key: string, file: File) =>
+      repository.uploadDocument(enrollmentId, key, file),
+
+    verifyDocument: (enrollmentId: string, key: string) =>
+      repository.verifyDocument(enrollmentId, key),
   };
 }
 

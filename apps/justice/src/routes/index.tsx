@@ -1,6 +1,15 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { FilePlus, ClockAlert, ShieldCheck, ArrowRight, FileText, Trash2 } from "lucide-react";
+import {
+  FilePlus,
+  ClockAlert,
+  ShieldCheck,
+  ArrowRight,
+  FileText,
+  Trash2,
+  User,
+  XCircle,
+} from "lucide-react";
 import { GovHeader } from "@/components/gov/GovHeader";
 import { StatusBadge } from "@/components/gov/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -41,21 +50,22 @@ export const Route = createFileRoute("/")({
 function Dashboard() {
   const router = useRouter();
   const items = useCasierStore((s) => s.items);
+  const stats = useCasierStore((s) => s.stats);
+  const hasMore = useCasierStore((s) => s.hasMore);
+  const isLoadingMore = useCasierStore((s) => s.isLoadingMore);
   const loadAll = useCasierStore((s) => s.loadAll);
+  const loadMore = useCasierStore((s) => s.loadMore);
+  const loadStats = useCasierStore((s) => s.loadStats);
   const startNew = useCasierStore((s) => s.startNew);
   const deleteCasier = useCasierStore((s) => s.deleteCasier);
 
   useEffect(() => {
     loadAll();
-  }, [loadAll]);
+    loadStats();
+  }, [loadAll, loadStats]);
 
-  const total = items.length;
-  const pending = items.filter((i) => i.status === "En instruction").length;
-  const validated = items.filter((i) => i.status === "Validée").length;
-  const submitted = items.filter((i) => i.status === "Soumise").length;
-
-  const startNewCasier = async () => {
-    const c = await startNew();
+  const startNewCasier = () => {
+    const c = startNew();
     router.navigate({ to: "/demande/$id", params: { id: c.id } });
   };
 
@@ -87,38 +97,47 @@ function Dashboard() {
           </Button>
         </div>
 
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Stat
             icon={<FileText className="h-5 w-5" />}
             label="Demandes totales"
-            value={total}
-            tone="green"
-          />
-          <Stat
-            icon={<ClockAlert className="h-5 w-5" />}
-            label="En instruction"
-            value={pending}
-            tone="yellow"
-          />
-          <Stat
-            icon={<ShieldCheck className="h-5 w-5" />}
-            label="Validées"
-            value={validated}
+            value={stats?.total ?? 0}
             tone="green"
           />
           <Stat
             icon={<FileText className="h-5 w-5" />}
             label="Soumises"
-            value={submitted}
+            value={stats?.soumises ?? 0}
             tone="neutral"
+          />
+          <Stat
+            icon={<ClockAlert className="h-5 w-5" />}
+            label="En instruction"
+            value={stats?.enInstruction ?? 0}
+            tone="yellow"
+          />
+          <Stat
+            icon={<ShieldCheck className="h-5 w-5" />}
+            label="Validées"
+            value={stats?.validees ?? 0}
+            tone="green"
+          />
+          <Stat
+            icon={<XCircle className="h-5 w-5" />}
+            label="Rejetées"
+            value={stats?.rejetees ?? 0}
+            tone="red"
           />
         </section>
 
         <section className="mt-8 rounded-lg border border-border bg-card">
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
             <div>
-              <h2 className="text-base font-semibold text-foreground">Demandes récentes</h2>
-              <p className="text-xs text-muted-foreground">Derniers dossiers soumis.</p>
+              <h2 className="text-base font-semibold text-foreground">Demandes</h2>
+              <p className="text-xs text-muted-foreground">
+                {items.length} dossier{items.length > 1 ? "s" : ""} chargé
+                {items.length > 1 ? "s" : ""}.
+              </p>
             </div>
           </div>
           <div className="divide-y divide-border">
@@ -127,7 +146,7 @@ function Dashboard() {
                 Aucune demande pour le moment.
               </div>
             )}
-            {items.slice(0, 8).map((c) => (
+            {items.map((c) => (
               <div
                 key={c.id}
                 className="group flex items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-secondary/50"
@@ -137,14 +156,12 @@ function Dashboard() {
                   params={{ id: c.id }}
                   className="flex flex-1 items-center gap-4"
                 >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cg-green-soft font-semibold text-cg-green-dark">
-                    {c.citizenNomAffiche ? c.citizenNomAffiche[0] : "?"}
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cg-green-soft text-cg-green-dark">
+                    <User className="h-5 w-5" />
                   </div>
                   <div>
-                    <div className="font-medium text-foreground">{c.citizenNomAffiche || "—"}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {c.citizenUin || "UIN —"} · {c.numeroDemande}
-                    </div>
+                    <div className="font-medium text-foreground">{c.citizenUin || "UIN —"}</div>
+                    <div className="text-xs text-muted-foreground">Dossier {c.id.slice(0, 8)}</div>
                   </div>
                 </Link>
                 <div className="flex items-center gap-3">
@@ -164,7 +181,7 @@ function Dashboard() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Supprimer cette demande ?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Cette action est irréversible. La demande {c.numeroDemande} sera
+                          Cette action est irréversible. La demande {c.id.slice(0, 8)} sera
                           définitivement supprimée.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
@@ -184,6 +201,13 @@ function Dashboard() {
               </div>
             ))}
           </div>
+          {hasMore && (
+            <div className="border-t border-border p-4 text-center">
+              <Button variant="outline" onClick={loadMore} disabled={isLoadingMore}>
+                {isLoadingMore ? "Chargement..." : "Charger plus"}
+              </Button>
+            </div>
+          )}
         </section>
       </main>
     </div>
@@ -199,12 +223,13 @@ function Stat({
   icon: React.ReactNode;
   label: string;
   value: number;
-  tone: "green" | "yellow" | "neutral";
+  tone: "green" | "yellow" | "neutral" | "red";
 }) {
   const toneMap = {
     green: "bg-cg-green-soft text-cg-green-dark",
     yellow: "bg-yellow-50 text-yellow-800",
     neutral: "bg-secondary text-muted-foreground",
+    red: "bg-red-50 text-cg-red",
   };
   return (
     <div className="rounded-lg border border-border bg-card p-5">

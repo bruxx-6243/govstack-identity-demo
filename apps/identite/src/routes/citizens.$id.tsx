@@ -14,6 +14,7 @@ import {
   Users,
   FileCheck2,
   CalendarClock,
+  XCircle,
 } from "lucide-react";
 import { GovHeader } from "@/components/gov/GovHeader";
 import { StatusBadge } from "@/components/gov/StatusBadge";
@@ -29,9 +30,27 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import type { Enrollment } from "@/domain/enrollment";
+import type { Enrollment, EnrollmentStatus } from "@/domain/enrollment";
 import { useEnrollmentStore } from "@/stores/enrollment.store";
+
+const STATUS_HISTORY_LABEL: Record<EnrollmentStatus, string> = {
+  Brouillon: "Dossier créé",
+  "En attente de validation": "Soumis pour validation",
+  Validé: "Identité validée",
+  Rejeté: "Dossier rejeté",
+};
 
 export const Route = createFileRoute("/citizens/$id")({
   head: () => ({
@@ -48,9 +67,15 @@ function CitizenProfile() {
   const { id } = Route.useParams();
   const router = useRouter();
   const loadOne = useEnrollmentStore((s) => s.loadOne);
+  const loadHistory = useEnrollmentStore((s) => s.loadHistory);
+  const history = useEnrollmentStore((s) => s.history);
   const verifyEnrollment = useEnrollmentStore((s) => s.verify);
+  const rejectEnrollment = useEnrollmentStore((s) => s.reject);
   const deleteEnrollment = useEnrollmentStore((s) => s.deleteEnrollment);
   const [data, setData] = useState<Enrollment | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [isRejectOpen, setIsRejectOpen] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
 
   useEffect(() => {
     loadOne(id).then((e) => {
@@ -60,7 +85,8 @@ function CitizenProfile() {
       }
       setData(e);
     });
-  }, [id, router, loadOne]);
+    loadHistory(id);
+  }, [id, router, loadOne, loadHistory]);
 
   if (!data) return null;
 
@@ -68,6 +94,23 @@ function CitizenProfile() {
     const updated = await verifyEnrollment(data);
     if (updated) setData(updated);
     toast.success("Identité vérifiée et validée");
+  };
+
+  const reject = async () => {
+    if (!rejectReason.trim()) {
+      toast.error("Veuillez indiquer un motif de rejet");
+      return;
+    }
+    setIsRejecting(true);
+    try {
+      const updated = await rejectEnrollment(data, rejectReason.trim());
+      if (updated) setData(updated);
+      toast.success("Dossier rejeté");
+      setIsRejectOpen(false);
+      setRejectReason("");
+    } finally {
+      setIsRejecting(false);
+    }
   };
 
   const exportRecord = () => {
@@ -116,6 +159,47 @@ function CitizenProfile() {
               <Button onClick={verify} className="gap-2">
                 <ShieldCheck className="h-4 w-4" /> Vérifier identité
               </Button>
+            )}
+            {data.status !== "Rejeté" && (
+              <Dialog open={isRejectOpen} onOpenChange={setIsRejectOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="destructive" className="gap-2">
+                    <XCircle className="h-4 w-4" /> Rejeter
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Rejeter ce dossier ?</DialogTitle>
+                    <DialogDescription>
+                      Indiquez le motif du rejet. Il sera consigné dans l'historique du dossier.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reject-reason">Motif du rejet</Label>
+                    <Textarea
+                      id="reject-reason"
+                      rows={3}
+                      value={rejectReason}
+                      onChange={(e) => setRejectReason(e.target.value)}
+                      placeholder="Ex. : pièce d'identité non lisible"
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsRejectOpen(false)}>
+                      Annuler
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={reject}
+                      disabled={isRejecting}
+                      className="gap-2"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      {isRejecting ? "Rejet..." : "Rejeter le dossier"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             )}
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -239,29 +323,17 @@ function CitizenProfile() {
             className="lg:col-span-2"
           >
             <div className="col-span-2 space-y-3">
-              <Timeline
-                items={
-                  [
-                    {
-                      date: data.createdAt,
-                      title: "Dossier créé",
-                      detail: `Par ${data.agentResponsable}`,
-                    },
-                    {
-                      date: data.updatedAt,
-                      title: "Dernière mise à jour",
-                      detail: data.centreEnrolement,
-                    },
-                    data.status === "Validé"
-                      ? {
-                          date: data.updatedAt,
-                          title: "Identité validée",
-                          detail: "Statut: Validé",
-                        }
-                      : null,
-                  ].filter(Boolean) as { date: string; title: string; detail: string }[]
-                }
-              />
+              {history.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aucun historique disponible.</p>
+              ) : (
+                <Timeline
+                  items={history.map((h) => ({
+                    date: h.changedAt,
+                    title: STATUS_HISTORY_LABEL[h.status],
+                    detail: h.reason ?? `Statut : ${h.status}`,
+                  }))}
+                />
+              )}
             </div>
           </Section>
         </div>

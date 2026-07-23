@@ -49,18 +49,19 @@ export const Route = createFileRoute("/")({
 function Dashboard() {
   const router = useRouter();
   const items = useEnrollmentStore((s) => s.items);
+  const stats = useEnrollmentStore((s) => s.stats);
+  const hasMore = useEnrollmentStore((s) => s.hasMore);
+  const isLoadingMore = useEnrollmentStore((s) => s.isLoadingMore);
   const loadAll = useEnrollmentStore((s) => s.loadAll);
+  const loadMore = useEnrollmentStore((s) => s.loadMore);
+  const loadStats = useEnrollmentStore((s) => s.loadStats);
   const startNewEnrollment = useEnrollmentStore((s) => s.startNew);
   const deleteEnrollment = useEnrollmentStore((s) => s.deleteEnrollment);
 
   useEffect(() => {
     loadAll();
-  }, [loadAll]);
-
-  const total = items.length;
-  const pending = items.filter((i) => i.status === "En attente de validation").length;
-  const completed = items.filter((i) => i.status === "Validé").length;
-  const drafts = items.filter((i) => i.status === "Brouillon").length;
+    loadStats();
+  }, [loadAll, loadStats]);
 
   const startNew = async () => {
     const e = await startNewEnrollment();
@@ -99,25 +100,25 @@ function Dashboard() {
           <Stat
             icon={<Users className="h-5 w-5" />}
             label="Citoyens enrôlés"
-            value={total}
+            value={stats?.total ?? 0}
             tone="green"
           />
           <Stat
             icon={<ClockAlert className="h-5 w-5" />}
             label="En attente"
-            value={pending}
+            value={stats?.pending ?? 0}
             tone="yellow"
           />
           <Stat
             icon={<ShieldCheck className="h-5 w-5" />}
             label="Validés"
-            value={completed}
+            value={stats?.validated ?? 0}
             tone="green"
           />
           <Stat
             icon={<FileText className="h-5 w-5" />}
             label="Brouillons"
-            value={drafts}
+            value={stats?.drafts ?? 0}
             tone="neutral"
           />
         </section>
@@ -125,9 +126,10 @@ function Dashboard() {
         <section className="mt-8 rounded-lg border border-border bg-card">
           <div className="flex items-center justify-between border-b border-border px-6 py-4">
             <div>
-              <h2 className="text-base font-semibold text-foreground">Enrôlements récents</h2>
+              <h2 className="text-base font-semibold text-foreground">Enrôlements</h2>
               <p className="text-xs text-muted-foreground">
-                Derniers dossiers créés dans votre centre.
+                {items.length} dossier{items.length > 1 ? "s" : ""} chargé
+                {items.length > 1 ? "s" : ""}.
               </p>
             </div>
           </div>
@@ -137,7 +139,7 @@ function Dashboard() {
                 Aucun enrôlement pour le moment.
               </div>
             )}
-            {items.slice(0, 8).map((e) => (
+            {items.map((e) => (
               <div
                 key={e.id}
                 className="group flex items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-secondary/50"
@@ -196,6 +198,13 @@ function Dashboard() {
               </div>
             ))}
           </div>
+          {hasMore && (
+            <div className="border-t border-border p-4 text-center">
+              <Button variant="outline" onClick={loadMore} disabled={isLoadingMore}>
+                {isLoadingMore ? "Chargement..." : "Charger plus"}
+              </Button>
+            </div>
+          )}
         </section>
       </main>
     </div>

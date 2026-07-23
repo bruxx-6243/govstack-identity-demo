@@ -2,17 +2,16 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
-  Edit,
   Printer,
   Download,
   ShieldCheck,
   XCircle,
   Trash2,
   Stamp,
-  FileCheck2,
   CalendarClock,
+  FileText,
   ShieldQuestion,
-  ShieldAlert,
+  ShieldCheck as ShieldCheckIcon,
 } from "lucide-react";
 import { GovHeader } from "@/components/gov/GovHeader";
 import { StatusBadge } from "@/components/gov/StatusBadge";
@@ -28,9 +27,27 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import type { Passeport } from "@/domain/passeport";
+import type { Passeport, PasseportStatus } from "@/domain/passeport";
 import { usePasseportStore } from "@/stores/passeport.store";
+
+const STATUS_HISTORY_LABEL: Record<PasseportStatus, string> = {
+  Soumise: "Demande soumise",
+  "En instruction": "Mise en instruction",
+  Validée: "Passeport validé",
+  Rejetée: "Demande rejetée",
+};
 
 export const Route = createFileRoute("/demandes/$id")({
   head: () => ({
@@ -43,20 +60,20 @@ export const Route = createFileRoute("/demandes/$id")({
   component: PasseportDetail,
 });
 
-const verifIcon = {
-  "Non vérifié": <ShieldQuestion className="h-4 w-4 text-muted-foreground" />,
-  Vérifié: <ShieldCheck className="h-4 w-4 text-cg-green" />,
-  "Mention trouvée": <ShieldAlert className="h-4 w-4 text-cg-red" />,
-};
-
 function PasseportDetail() {
   const { id } = Route.useParams();
   const router = useRouter();
   const loadOne = usePasseportStore((s) => s.loadOne);
+  const loadHistory = usePasseportStore((s) => s.loadHistory);
+  const history = usePasseportStore((s) => s.history);
+  const instruirePasseport = usePasseportStore((s) => s.finalize);
   const validatePasseport = usePasseportStore((s) => s.validate);
   const rejectPasseport = usePasseportStore((s) => s.reject);
   const deletePasseport = usePasseportStore((s) => s.deletePasseport);
   const [data, setData] = useState<Passeport | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [isRejectOpen, setIsRejectOpen] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
 
   useEffect(() => {
     loadOne(id).then((p) => {
@@ -66,9 +83,16 @@ function PasseportDetail() {
       }
       setData(p);
     });
-  }, [id, router, loadOne]);
+    loadHistory(id);
+  }, [id, router, loadOne, loadHistory]);
 
   if (!data) return null;
+
+  const instruire = async () => {
+    const updated = await instruirePasseport();
+    if (updated) setData(updated);
+    toast.success("Demande mise en instruction");
+  };
 
   const validate = async () => {
     const updated = await validatePasseport(data);
@@ -77,9 +101,20 @@ function PasseportDetail() {
   };
 
   const reject = async () => {
-    const updated = await rejectPasseport(data);
-    if (updated) setData(updated);
-    toast.success("Demande rejetée");
+    if (!rejectReason.trim()) {
+      toast.error("Veuillez indiquer un motif de rejet");
+      return;
+    }
+    setIsRejecting(true);
+    try {
+      const updated = await rejectPasseport(data, rejectReason.trim());
+      if (updated) setData(updated);
+      toast.success("Demande rejetée");
+      setIsRejectOpen(false);
+      setRejectReason("");
+    } finally {
+      setIsRejecting(false);
+    }
   };
 
   const exportRecord = () => {
@@ -87,7 +122,7 @@ function PasseportDetail() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${data.numeroDemande}.json`;
+    a.download = `${data.id}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -111,28 +146,63 @@ function PasseportDetail() {
             <ArrowLeft className="h-4 w-4" /> Retour au tableau de bord
           </Link>
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => router.navigate({ to: "/demande/$id", params: { id: data.id } })}
-              className="gap-2"
-            >
-              <Edit className="h-4 w-4" /> Modifier
-            </Button>
             <Button variant="outline" onClick={() => window.print()} className="gap-2">
               <Printer className="h-4 w-4" /> Imprimer
             </Button>
             <Button variant="outline" onClick={exportRecord} className="gap-2">
               <Download className="h-4 w-4" /> Exporter
             </Button>
-            {data.status !== "Validée" && data.status !== "Rejetée" && (
-              <>
-                <Button onClick={validate} className="gap-2">
-                  <ShieldCheck className="h-4 w-4" /> Valider
-                </Button>
-                <Button variant="destructive" onClick={reject} className="gap-2">
-                  <XCircle className="h-4 w-4" /> Rejeter
-                </Button>
-              </>
+            {data.status === "Soumise" && (
+              <Button onClick={instruire} className="gap-2">
+                <ShieldCheck className="h-4 w-4" /> Mettre en instruction
+              </Button>
+            )}
+            {data.status === "En instruction" && (
+              <Button onClick={validate} className="gap-2">
+                <ShieldCheck className="h-4 w-4" /> Valider
+              </Button>
+            )}
+            {(data.status === "Soumise" || data.status === "En instruction") && (
+              <Dialog open={isRejectOpen} onOpenChange={setIsRejectOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="destructive" className="gap-2">
+                    <XCircle className="h-4 w-4" /> Rejeter
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Rejeter cette demande ?</DialogTitle>
+                    <DialogDescription>
+                      Indiquez le motif du rejet. Il sera consigné dans l'historique de la
+                      demande.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="reject-reason">Motif du rejet</Label>
+                    <Textarea
+                      id="reject-reason"
+                      rows={3}
+                      value={rejectReason}
+                      onChange={(e) => setRejectReason(e.target.value)}
+                      placeholder="Ex. : documents fournis non conformes"
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsRejectOpen(false)}>
+                      Annuler
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={reject}
+                      disabled={isRejecting}
+                      className="gap-2"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      {isRejecting ? "Rejet..." : "Rejeter la demande"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             )}
             <AlertDialog>
               <AlertDialogTrigger asChild>
@@ -144,7 +214,7 @@ function PasseportDetail() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Supprimer cette demande ?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Cette action est irréversible. La demande {data.numeroDemande} sera
+                    Cette action est irréversible. La demande {data.id.slice(0, 8)} sera
                     définitivement supprimée.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -173,13 +243,10 @@ function PasseportDetail() {
                 République du Congo — Passeport
               </div>
               <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-                {data.citizenNomAffiche || "Demandeur non résolu"}
+                Dossier {data.id.slice(0, 8)}
               </h1>
               <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                 <Info label="UIN citoyen" value={data.citizenUin || "—"} mono />
-                <Info label="Numéro de demande" value={data.numeroDemande} mono />
-                <Info label="Type de passeport" value={data.typePasseport || "—"} />
-                <Info label="Centre de retrait" value={data.centreRetrait || "—"} />
               </div>
             </div>
             <div className="flex flex-col items-end gap-2">
@@ -197,31 +264,20 @@ function PasseportDetail() {
             icon={<ShieldCheck className="h-4 w-4" />}
           >
             <div className="col-span-2 flex items-center gap-2 text-sm text-foreground">
-              {verifIcon[data.verificationCasierStatut]}
-              {data.verificationCasierStatut}
+              {data.casierVerifie ? (
+                <ShieldCheckIcon className="h-5 w-5 text-cg-green" />
+              ) : (
+                <ShieldQuestion className="h-5 w-5 text-muted-foreground" />
+              )}
+              {data.casierVerifie ? "Vérifié" : "Non vérifié"}
               <span className="text-xs text-muted-foreground">
                 (vérification X-Road — Ministère de la Justice)
               </span>
             </div>
           </Section>
 
-          <Section title="Documents" icon={<FileCheck2 className="h-4 w-4" />}>
-            <div className="col-span-2 space-y-2">
-              {data.documents.map((d) => (
-                <div
-                  key={d.key}
-                  className="flex items-center justify-between rounded-md border border-border bg-secondary/30 px-3 py-2 text-sm"
-                >
-                  <div>
-                    <div className="font-medium text-foreground">{d.label}</div>
-                    {d.fileName && (
-                      <div className="text-xs text-muted-foreground">{d.fileName}</div>
-                    )}
-                  </div>
-                  <StatusBadge status={d.status} />
-                </div>
-              ))}
-            </div>
+          <Section title="Document" icon={<FileText className="h-4 w-4" />}>
+            <Info label="URL du document" value={data.documentUrl || "—"} full />
           </Section>
 
           <Section
@@ -230,28 +286,17 @@ function PasseportDetail() {
             className="lg:col-span-2"
           >
             <div className="col-span-2 space-y-3">
-              <Timeline
-                items={
-                  [
-                    { date: data.createdAt, title: "Demande créée", detail: data.numeroDemande },
-                    { date: data.updatedAt, title: "Dernière mise à jour", detail: data.status },
-                    data.status === "Validée"
-                      ? {
-                          date: data.updatedAt,
-                          title: "Passeport validé",
-                          detail: "Statut: Validée",
-                        }
-                      : null,
-                    data.status === "Rejetée"
-                      ? {
-                          date: data.updatedAt,
-                          title: "Demande rejetée",
-                          detail: "Statut: Rejetée",
-                        }
-                      : null,
-                  ].filter(Boolean) as { date: string; title: string; detail: string }[]
-                }
-              />
+              {history.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aucun historique disponible.</p>
+              ) : (
+                <Timeline
+                  items={history.map((h) => ({
+                    date: h.changedAt,
+                    title: STATUS_HISTORY_LABEL[h.status],
+                    detail: h.reason ?? `Statut : ${h.status}`,
+                  }))}
+                />
+              )}
             </div>
           </Section>
         </div>

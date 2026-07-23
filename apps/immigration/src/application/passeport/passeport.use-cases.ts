@@ -6,30 +6,39 @@ import { createEmptyPasseport, type Passeport, type PasseportRepository } from "
  */
 export function createPasseportUseCases(repository: PasseportRepository) {
   return {
-    listPasseports: () => repository.list(),
+    listPasseports: (page?: number, pageSize?: number) => repository.list(page, pageSize),
 
     getPasseport: (id: string) => repository.getById(id),
 
-    async startPasseport(): Promise<Passeport> {
-      const passeport = createEmptyPasseport();
-      return repository.save(passeport);
+    /**
+     * Builds a blank passeport locally only — not persisted yet. The
+     * backend's citizen_uid is required at creation and only known once
+     * the agent fills in Step 1, so the actual POST /demandes happens on
+     * the first saveDraft() call, not here.
+     */
+    startPasseport(): Passeport {
+      return createEmptyPasseport();
     },
 
     saveDraft: (passeport: Passeport) => repository.save(passeport),
 
     async finalizePasseport(passeport: Passeport): Promise<Passeport> {
-      return repository.save({ ...passeport, status: "En instruction" });
+      return repository.instruire(passeport);
     },
 
     async validatePasseport(passeport: Passeport): Promise<Passeport> {
-      return repository.save({ ...passeport, status: "Validée" });
+      return repository.valider(passeport);
     },
 
-    async rejectPasseport(passeport: Passeport): Promise<Passeport> {
-      return repository.save({ ...passeport, status: "Rejetée" });
+    async rejectPasseport(passeport: Passeport, reason: string): Promise<Passeport> {
+      return repository.rejeter(passeport, reason);
     },
 
     deletePasseport: (id: string) => repository.remove(id),
+
+    getStats: () => repository.getStats(),
+
+    getHistory: (id: string) => repository.getHistory(id),
   };
 }
 
