@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Search, ShieldCheck, UserRound, CircleCheck } from "lucide-react";
+import { ArrowLeft, Search, ShieldCheck, UserRound, CircleCheck, ShieldAlert } from "lucide-react";
 import { GovHeader } from "@/components/gov/GovHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,10 +8,15 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { validateCitizenUin } from "@/domain/passeport";
 import { lookupCitizen } from "@/infrastructure/identity/http-citizen-lookup.repository";
+import {
+  verifierCasier,
+  type CasierLookupResult,
+} from "@/infrastructure/justice/http-casier-lookup.repository";
 import { usePasseportStore } from "@/stores/passeport.store";
 import { cn } from "@/lib/utils";
 
 const IDENTITY_API_URL = import.meta.env.VITE_ENROLLMENT_API_URL as string | undefined;
+const CASIER_API_URL = import.meta.env.VITE_CASIER_API_URL as string | undefined;
 
 export const Route = createFileRoute("/demande/$id")({
   head: () => ({
@@ -35,6 +40,8 @@ function PasseportCreate() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLooking, setIsLooking] = useState(false);
   const [lookedUpName, setLookedUpName] = useState("");
+  const [casierResult, setCasierResult] = useState<CasierLookupResult | null>(null);
+  const [isCheckingCasier, setIsCheckingCasier] = useState(false);
   const data = current;
 
   useEffect(() => {
@@ -56,6 +63,7 @@ function PasseportCreate() {
   const clearLookup = (uin: string) => {
     updateCurrent("citizenUin", uin);
     if (lookedUpName) setLookedUpName("");
+    if (casierResult) setCasierResult(null);
     if (error) setError(undefined);
   };
 
@@ -78,6 +86,23 @@ function PasseportCreate() {
       toast.error((err as Error).message);
     } finally {
       setIsLooking(false);
+    }
+  };
+
+  const checkCasier = async () => {
+    if (!data.citizenUin) return;
+    if (!CASIER_API_URL) {
+      toast.error("VITE_CASIER_API_URL n'est pas configuré.");
+      return;
+    }
+    setIsCheckingCasier(true);
+    try {
+      const result = await verifierCasier(CASIER_API_URL, data.citizenUin);
+      setCasierResult(result);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setIsCheckingCasier(false);
     }
   };
 
@@ -194,6 +219,48 @@ function PasseportCreate() {
               Résolu auprès de l'Identity BB à titre de confirmation — non enregistré dans le
               dossier.
             </p>
+
+            <div className="space-y-1.5 border-t border-border pt-5">
+              <Label className="text-foreground">Casier judiciaire (Ministère de la Justice)</Label>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={checkCasier}
+                disabled={isCheckingCasier || !data.citizenUin}
+                className="gap-1.5"
+              >
+                <Search className="h-3.5 w-3.5" />
+                {isCheckingCasier ? "Vérification…" : "Vérifier le casier"}
+              </Button>
+
+              {casierResult && (
+                <div
+                  className={cn(
+                    "mt-2 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm",
+                    casierResult.aMention
+                      ? "border-yellow-300 bg-yellow-50 text-yellow-800"
+                      : "border-cg-green/30 bg-cg-green-soft/60 text-cg-green-dark",
+                  )}
+                >
+                  {casierResult.aMention ? (
+                    <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  ) : (
+                    <CircleCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                  )}
+                  <div>
+                    <div className="font-medium">
+                      {casierResult.aMention ? "Mention trouvée" : "Aucune mention trouvée"}
+                    </div>
+                    <div className="text-xs opacity-80">{casierResult.detail}</div>
+                  </div>
+                </div>
+              )}
+              {!casierResult && (
+                <p className="text-xs text-muted-foreground">
+                  Optionnel — informatif uniquement, n'empêche pas la création de la demande.
+                </p>
+              )}
+            </div>
 
             <Button onClick={create} disabled={isSaving} size="lg" className="w-full gap-2">
               <ShieldCheck className="h-4 w-4" />

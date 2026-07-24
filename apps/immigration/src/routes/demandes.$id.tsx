@@ -12,6 +12,8 @@ import {
   FileText,
   ShieldQuestion,
   ShieldCheck as ShieldCheckIcon,
+  ShieldAlert,
+  Search,
 } from "lucide-react";
 import { GovHeader } from "@/components/gov/GovHeader";
 import { StatusBadge } from "@/components/gov/StatusBadge";
@@ -40,7 +42,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import type { Passeport, PasseportStatus } from "@/domain/passeport";
+import {
+  verifierCasier,
+  type CasierLookupResult,
+} from "@/infrastructure/justice/http-casier-lookup.repository";
 import { usePasseportStore } from "@/stores/passeport.store";
+
+const CASIER_API_URL = import.meta.env.VITE_CASIER_API_URL as string | undefined;
 
 const STATUS_HISTORY_LABEL: Record<PasseportStatus, string> = {
   Soumise: "Demande soumise",
@@ -74,6 +82,8 @@ function PasseportDetail() {
   const [rejectReason, setRejectReason] = useState("");
   const [isRejectOpen, setIsRejectOpen] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [casierResult, setCasierResult] = useState<CasierLookupResult | null>(null);
+  const [isCheckingCasier, setIsCheckingCasier] = useState(false);
 
   useEffect(() => {
     loadOne(id).then((p) => {
@@ -114,6 +124,23 @@ function PasseportDetail() {
       setRejectReason("");
     } finally {
       setIsRejecting(false);
+    }
+  };
+
+  const checkCasier = async () => {
+    if (!data.citizenUin) return;
+    if (!CASIER_API_URL) {
+      toast.error("VITE_CASIER_API_URL n'est pas configuré.");
+      return;
+    }
+    setIsCheckingCasier(true);
+    try {
+      const result = await verifierCasier(CASIER_API_URL, data.citizenUin);
+      setCasierResult(result);
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setIsCheckingCasier(false);
     }
   };
 
@@ -270,8 +297,43 @@ function PasseportDetail() {
               )}
               {data.casierVerifie ? "Vérifié" : "Non vérifié"}
               <span className="text-xs text-muted-foreground">
-                (vérification X-Road — Ministère de la Justice)
+                (statut enregistré au dossier)
               </span>
+            </div>
+
+            <div className="col-span-2 mt-3 border-t border-border pt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={checkCasier}
+                disabled={isCheckingCasier || !data.citizenUin}
+                className="gap-2"
+              >
+                <Search className="h-3.5 w-3.5" />
+                {isCheckingCasier ? "Vérification..." : "Vérifier le casier (Ministère de la Justice)"}
+              </Button>
+
+              {casierResult && (
+                <div
+                  className={`mt-3 flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${
+                    casierResult.aMention
+                      ? "border-yellow-300 bg-yellow-50 text-yellow-800"
+                      : "border-cg-green/30 bg-cg-green-soft/60 text-cg-green-dark"
+                  }`}
+                >
+                  {casierResult.aMention ? (
+                    <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  ) : (
+                    <ShieldCheckIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                  )}
+                  <div>
+                    <div className="font-medium">
+                      {casierResult.aMention ? "Mention trouvée" : "Aucune mention trouvée"}
+                    </div>
+                    <div className="text-xs opacity-80">{casierResult.detail}</div>
+                  </div>
+                </div>
+              )}
             </div>
           </Section>
 
