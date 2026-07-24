@@ -157,7 +157,7 @@ function CitizenProfile() {
             </Button>
             {data.status !== "Validé" && (
               <Button onClick={verify} className="gap-2">
-                <ShieldCheck className="h-4 w-4" /> Vérifier identité
+                <ShieldCheck className="h-4 w-4" /> Valider identité
               </Button>
             )}
             {data.status !== "Rejeté" && (
@@ -231,7 +231,6 @@ function CitizenProfile() {
 
         {/* ID Card */}
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="flag-stripe" />
           <div className="grid gap-6 p-6 md:grid-cols-[auto_1fr_auto] md:items-center">
             <div className="flex h-32 w-28 items-center justify-center rounded-md bg-secondary ring-1 ring-border">
               <User className="h-12 w-12 text-muted-foreground" />
